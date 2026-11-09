@@ -2,6 +2,7 @@ import logging
 import threading
 from PIL import Image
 from app.core.tasks import DisplayTask, ClearTask
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,10 @@ class MatrixEngine:
         self._stop_event = threading.Event()
         self._pending_task: DisplayTask | None = None
         self._worker_thread: threading.Thread | None = None
+
+        self._frame_lock = threading.Lock()
+        self._current_frame: Image.Image = Image.new("RGB", (self.width, self.height), (0, 0, 0))
+        self.active_label: str = "Idle"
 
     def init_hardware(self, config_obj) -> None:
         """
@@ -67,11 +72,12 @@ class MatrixEngine:
         )
         self._worker_thread.start()
 
-    def set_task(self, task: DisplayTask) -> None:
+    def set_task(self, task: DisplayTask, label: str = "Custom Display") -> None:
         """Thread-safe method called by Flask routes or APScheduler to switch displays."""
         with self._lock:
             self._pending_task = task
-            self._new_task_event.set()  # Immediately wakes the render thread
+            self.active_label = label
+            self._new_task_event.set()
 
     def clear(self) -> None:
         self.set_task(ClearTask())
@@ -125,12 +131,19 @@ class MatrixEngine:
                 self._new_task_event.wait()
 
     def _push_to_hardware(self, image: Image.Image) -> None:
+        with self._frame_lock:
+            self._current_frame = image.copy()
+
         if HARDWARE_AVAILABLE and self.matrix and self.canvas:
             self.canvas.SetImage(image)
             self.canvas = self.matrix.SwapOnVSync(self.canvas)
-        else:
-            logger.debug(f"[MOCK DISPLAY] Rendered frame {image.size}")
 
+    def get_preview_png(self) -> bytes:
+        """Returns the current 64x32 frame encoded as a lightweight PNG byte stream."""
+        with self._frame_lock:
+            buf = io.BytesIO()
+            self._current_frame.save(buf, format="PNG")
+            return buf.getvalue()
 
 # Singleton instance imported by Blueprints and Scheduler
 matrix_engine = MatrixEngine()

@@ -1,5 +1,27 @@
 {% extends "base.html" %}
 
+<div class="card shadow-sm mb-4 bg-black border-info">
+    <div class="card-body d-flex align-items-center justify-content-between">
+        <div>
+            <h6 class="text-info mb-1">Live 64x32 Matrix Output</h6>
+            <span class="small text-secondary">Mirrors current hardware frame buffer</span>
+        </div>
+        <img id="live-matrix-preview"
+             src="{{ url_for('web.ui_live_preview') }}"
+             class="pixel-preview"
+             style="width: 256px; height: 128px; border: 2px solid #0dcaf0;"
+             alt="Live Matrix Preview">
+    </div>
+</div>
+<script>
+    setInterval(() => {
+        const img = document.getElementById("live-matrix-preview");
+        if (img && !document.hidden) {
+            img.src = "{{ url_for('web.ui_live_preview') }}?t=" + Date.now();
+        }
+    }, 750);
+</script>
+
 {% block content %}
 <div class="row g-4">
     <!-- Left Column: Plugins & Media Library -->

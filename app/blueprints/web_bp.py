@@ -6,12 +6,15 @@ from flask import (
     request,
     current_app,
     send_from_directory,
+    Response
 )
 from werkzeug.utils import secure_filename
 from app.core.matrix_engine import matrix_engine
 from app.core.tasks import StaticImageTask, AnimationTask, PluginTask
 from app.core.scheduler import scheduler, schedule_display_at
 from app.plugins import PLUGIN_REGISTRY
+from app.core.presets import preset_manager
+from app.core.serial_controller import serial_controller
 
 web_bp = Blueprint("web", __name__)
 
@@ -218,4 +221,18 @@ def ui_schedule_delete(job_id: str):
         scheduler.remove_job(job_id)
     table_html = render_template("partials/schedule_list.html", jobs=get_formatted_jobs())
     alert_html = render_status_alert(f"Removed scheduled job {job_id[:8]}.", "secondary", oob=True)
+
     return table_html + alert_html
+
+
+@web_bp.route("/ui/preview.png")
+def ui_live_preview():
+    """Serves the current 64x32 matrix frame as a PNG image."""
+    png_bytes = matrix_engine.get_preview_png()
+    return Response(png_bytes, mimetype="image/png", headers={"Cache-Control": "no-store"})
+
+@web_bp.route("/ui/presets/run/<int:index>", methods=["POST"])
+def ui_run_preset(index: int):
+    name = preset_manager.trigger_preset(index)
+    serial_controller.send_preset_list()  # Sync Pico OLED status
+    return render_status_alert(f"Activated preset: {name}")
