@@ -15,7 +15,12 @@ from werkzeug.utils import secure_filename
 from app.core.matrix_engine import matrix_engine
 from app.core.tasks import StaticImageTask, PluginTask
 from app.core.sequences import sequence_manager, ALLOWED_EXTENSIONS, natural_sort_key
-from app.core.scheduler import scheduler, schedule_display_at
+from app.core.scheduler import (
+    scheduler,
+    schedule_one_off,
+    schedule_annual,
+    schedule_daily,
+)
 from app.core.presets import preset_manager
 from app.core.serial_controller import serial_controller
 from app.plugins import PLUGIN_REGISTRY
@@ -48,8 +53,9 @@ def get_formatted_jobs() -> list[dict]:
         jobs.append(
             {
                 "id": job.id,
+                "schedule_label": job.name or "Scheduled",
                 "next_run": (
-                    job.next_run_time.strftime("%Y-%m-%d %H:%M:%S")
+                    job.next_run_time.strftime("%Y-%m-%d %H:%M")
                     if job.next_run_time
                     else "Pending"
                 ),
@@ -276,15 +282,10 @@ def ui_display_clear():
 
 @web_bp.route("/ui/schedule/add", methods=["POST"])
 def ui_schedule_add():
-    run_at_str = request.form.get("run_at", "")
+    recurrence = request.form.get("recurrence", "annual")
     task_type = request.form.get("task_type", "sequence")
 
-    try:
-        run_date = datetime.fromisoformat(run_at_str)
-    except ValueError:
-        table_html = render_template("partials/schedule_list.html", jobs=get_formatted_jobs())
-        return table_html + render_status_alert("Invalid date/time.", "danger", oob=True)
-
+    # Build the task payload
     payload = {}
     if task_type == "static":
         fn = secure_filename(request.form.get("static_filename", ""))
@@ -305,10 +306,29 @@ def ui_schedule_add():
             },
         }
 
-    job_id = schedule_display_at(run_date, task_type, payload)
+    # Parse timing based on recurrence mode (Annual, Daily, or One-Off)
+    try:
+        if recurrence == "annual":
+            month = int(request.form.get("annual_month", 1))
+            day = int(request.form.get("annual_day", 1))
+            time_str = request.form.get("trigger_time", "09:00")
+            hour, minute = [int(x) for x in time_str.split(":", 1)]
+            job_id = schedule_annual(month, day, hour, minute, task_type, payload)
+        elif recurrence == "daily":
+            time_str = request.form.get("trigger_time", "23:00")
+            hour, minute = [int(x) for x in time_str.split(":", 1)]
+            job_id = schedule_daily(hour, minute, task_type, payload)
+        else:
+            run_at_str = request.form.get("run_at", "")
+            run_date = datetime.fromisoformat(run_at_str)
+            job_id = schedule_one_off(run_date, task_type, payload)
+    except (ValueError, TypeError) as exc:
+        table_html = render_template("partials/schedule_list.html", jobs=get_formatted_jobs())
+        return table_html + render_status_alert(f"Invalid schedule time: {exc}", "danger", oob=True)
+
     table_html = render_template("partials/schedule_list.html", jobs=get_formatted_jobs())
     alert_html = render_status_alert(
-        f"Scheduled '{task_type}' ({job_id[:8]}) for {run_date.strftime('%Y-%m-%d %H:%M')}.",
+        f"Added {recurrence} '{task_type}' job ({job_id[:8]}).",
         "success",
         oob=True,
     )

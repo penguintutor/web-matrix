@@ -78,7 +78,7 @@
             </div>
         </div>
 
-        <!-- 2. Individual Static Images Card -->
+        <!-- Individual Static Images Card -->
         <div class="card shadow-sm">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span class="fw-semibold text-info">Individual Static Images</span>
@@ -116,16 +116,27 @@
 
         <!-- Schedule Future Display -->
         <div class="card shadow-sm mb-4">
-            <div class="card-header fw-semibold text-warning">Schedule Future Display</div>
+            <div class="card-header fw-semibold text-warning">Schedule Display</div>
             <div class="card-body">
                 <form hx-post="{{ url_for('web.ui_schedule_add') }}"
                       hx-target="#schedule-container"
                       class="row g-3">
-                    <div class="col-md-7">
-                        <label class="form-label small">Trigger Date & Time</label>
-                        <input type="datetime-local" name="run_at" class="form-control form-control-sm" required>
+                    <!-- Recurrence Type & Task Type -->
+                    <div class="col-md-6">
+                        <label class="form-label small">Frequency</label>
+                        <select name="recurrence" class="form-select form-select-sm"
+                                onchange="
+                                    document.getElementById('time-annual-fields').classList.toggle('d-none', this.value !== 'annual');
+                                    document.getElementById('time-clock-field').classList.toggle('d-none', this.value === 'once');
+                                    document.getElementById('time-once-field').classList.toggle('d-none', this.value !== 'once');
+                                ">
+                            <option value="annual" selected>Annual (Every Year)</option>
+                            <option value="daily">Daily (Every Day)</option>
+                            <option value="once">One-Off (With Year)</option>
+                        </select>
                     </div>
-                    <div class="col-md-5">
+
+                    <div class="col-md-6">
                         <label class="form-label small">Task Type</label>
                         <select name="task_type" class="form-select form-select-sm"
                                 onchange="document.querySelectorAll('.sched-fields').forEach(el => el.classList.add('d-none'));
@@ -133,10 +144,49 @@
                             <option value="sequence" selected>Animation Sequence</option>
                             <option value="static">Individual Image</option>
                             <option value="plugin">Scrolling Text</option>
-                            <option value="clear">Clear Matrix</option>
+                            <option value="clear">Clear Matrix (Off)</option>
                         </select>
                     </div>
 
+                    <!-- Annual Day & Month (No Year) -->
+                    <div id="time-annual-fields" class="col-7 row g-2 m-0 p-0">
+                        <div class="col-5">
+                            <label class="form-label small">Day</label>
+                            <input type="number" name="annual_day" class="form-control form-control-sm"
+                                   min="1" max="31" value="25">
+                        </div>
+                        <div class="col-7">
+                            <label class="form-label small">Month</label>
+                            <select name="annual_month" class="form-select form-select-sm">
+                                <option value="1">January</option>
+                                <option value="2">February</option>
+                                <option value="3">March</option>
+                                <option value="4">April</option>
+                                <option value="5">May</option>
+                                <option value="6">June</option>
+                                <option value="7">July</option>
+                                <option value="8">August</option>
+                                <option value="9">September</option>
+                                <option value="10">October</option>
+                                <option value="11">November</option>
+                                <option value="12" selected>December</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Clock Time (Used by both Annual and Daily) -->
+                    <div id="time-clock-field" class="col-5">
+                        <label class="form-label small">Time (24h)</label>
+                        <input type="time" name="trigger_time" class="form-control form-control-sm" value="09:00">
+                    </div>
+
+                    <!-- One-Off Full Datetime (Hidden unless One-Off is chosen) -->
+                    <div id="time-once-field" class="col-12 d-none">
+                        <label class="form-label small">Specific Date &amp; Time</label>
+                        <input type="datetime-local" name="run_at" class="form-control form-control-sm">
+                    </div>
+
+                    <!-- Task Payload Selectors -->
                     <div id="sched-sequence" class="sched-fields col-12">
                         <label class="form-label small">Select Animation Sequence</label>
                         <select name="sequence_name" class="form-select form-select-sm">
@@ -158,16 +208,16 @@
                     <div id="sched-plugin" class="sched-fields col-12 row g-2 m-0 p-0 d-none">
                         <div class="col-8">
                             <label class="form-label small">Message</label>
-                            <input type="text" name="plugin_text" class="form-control form-control-sm" value="Scheduled Alert!">
+                            <input type="text" name="plugin_text" class="form-control form-control-sm" value="Happy Birthday!">
                         </div>
                         <div class="col-4">
                             <label class="form-label small">Color</label>
-                            <input type="color" name="plugin_color" class="form-control form-control-color w-100" value="#ff0000">
+                            <input type="color" name="plugin_color" class="form-control form-control-color w-100" value="#00ff80">
                         </div>
                     </div>
 
                     <div id="sched-clear" class="sched-fields col-12 d-none">
-                        <p class="small text-secondary mb-0">Turns off all LEDs at the scheduled timestamp.</p>
+                        <p class="small text-secondary mb-0">Turns off all LEDs at the scheduled time.</p>
                     </div>
 
                     <div class="col-12">
