@@ -1,0 +1,15 @@
+[Unit]
+Description=RGB LED Matrix Flask Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/<username>/web_matrix
+Environment="SUDO_USER=daemon"
+ExecStart=/home/<username>/venv/pixels/bin/python /home/<username>/web_matrix/run_daemon.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

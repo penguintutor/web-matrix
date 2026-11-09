@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Left Column: Plugins & Media Library -->
+    <div class="col-lg-7">
+        <!-- Live Plugin Launcher -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header fw-semibold text-info">Run Live Text / Plugin</div>
+            <div class="card-body">
+                <form hx-post="{{ url_for('web.ui_display_plugin') }}"
+                      hx-target="#status-banner"
+                      hx-swap="outerHTML"
+                      class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label small">Plugin</label>
+                        <select name="plugin_name" class="form-select form-select-sm">
+                            {% for name, cls in plugins.items() %}
+                            <option value="{{ name }}">{{ name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label small">Message Text</label>
+                        <input type="text" name="text" class="form-control form-control-sm" value="Hello Silverstone!" required>
+                    </div>
+                    <div class="col-4 col-md-3">
+                        <label class="form-label small">Text Color</label>
+                        <input type="color" name="color" class="form-control form-control-color w-100" value="#00ff80">
+                    </div>
+                    <div class="col-4 col-md-3">
+                        <label class="form-label small">Background</label>
+                        <input type="color" name="bg_color" class="form-control form-control-color w-100" value="#000000">
+                    </div>
+                    <div class="col-4 col-md-3">
+                        <label class="form-label small">Speed (FPS)</label>
+                        <input type="number" name="fps" class="form-control form-control-sm" value="25" min="1" max="60">
+                    </div>
+                    <div class="col-12 col-md-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-info btn-sm w-100 fw-semibold">Send to Matrix</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Image & Animation Upload + Gallery -->
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-semibold text-info">Media Library & Frame Animator</span>
+                <form hx-post="{{ url_for('web.ui_upload_files') }}"
+                      hx-encoding="multipart/form-data"
+                      hx-target="#media-container"
+                      class="d-flex gap-2 align-items-center m-0">
+                    <input type="file" name="files" multiple accept=".png,.jpg,.jpeg,.gif,.bmp"
+                           class="form-control form-control-sm" required>
+                    <button type="submit" class="btn btn-primary btn-sm text-nowrap">Upload</button>
+                </form>
+            </div>
+            <div class="card-body" id="media-container">
+                {% include "partials/media_list.html" %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Future Scheduler & Job Queue -->
+    <div class="col-lg-5">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header fw-semibold text-warning">Schedule Future Display</div>
+            <div class="card-body">
+                <form hx-post="{{ url_for('web.ui_schedule_add') }}"
+                      hx-target="#schedule-container"
+                      class="row g-3">
+                    <div class="col-md-7">
+                        <label class="form-label small">Trigger Date & Time</label>
+                        <input type="datetime-local" name="run_at" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small">Task Type</label>
+                        <select name="task_type" class="form-select form-select-sm"
+                                onchange="document.querySelectorAll('.sched-fields').forEach(el => el.classList.add('d-none'));
+                                          document.getElementById('sched-' + this.value).classList.remove('d-none');">
+                            <option value="plugin" selected>Plugin (Text)</option>
+                            <option value="static">Static Image / GIF</option>
+                            <option value="animation">Frame Sequence</option>
+                            <option value="clear">Clear Matrix</option>
+                        </select>
+                    </div>
+
+                    <!-- Plugin Schedule Fields -->
+                    <div id="sched-plugin" class="sched-fields col-12 row g-2 m-0 p-0">
+                        <div class="col-8">
+                            <label class="form-label small">Scheduled Text</label>
+                            <input type="text" name="plugin_text" class="form-control form-control-sm" value="Scheduled Alert!">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small">Color</label>
+                            <input type="color" name="plugin_color" class="form-control form-control-color w-100" value="#ff0000">
+                        </div>
+                    </div>
+
+                    <!-- Static Image Schedule Fields -->
+                    <div id="sched-static" class="sched-fields col-12 d-none">
+                        <label class="form-label small">Filename (from Media Library)</label>
+                        <input type="text" name="static_filename" class="form-control form-control-sm" placeholder="e.g. logo.png">
+                    </div>
+
+                    <!-- Animation Schedule Fields -->
+                    <div id="sched-animation" class="sched-fields col-12 d-none">
+                        <label class="form-label small">Hold Ctrl/Cmd to select frames in Media Library or enter FPS</label>
+                        <input type="number" name="anim_fps" class="form-control form-control-sm" value="10" placeholder="FPS">
+                    </div>
+
+                    <div id="sched-clear" class="sched-fields col-12 d-none">
+                        <p class="small text-secondary mb-0">Turns off all LEDs at the scheduled timestamp.</p>
+                    </div>
+
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-warning btn-sm w-100 fw-semibold">Add to Schedule</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Persistent Schedule Queue Table -->
+        <div class="card shadow-sm">
+            <div class="card-header fw-semibold text-warning">Scheduled Jobs Queue</div>
+            <div class="card-body p-0" id="schedule-container">
+                {% include "partials/schedule_list.html" %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,42 @@
+{% if files %}
+<form hx-post="{{ url_for('web.ui_display_animation') }}"
+      hx-target="#status-banner"
+      hx-swap="outerHTML">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 pb-3 mb-3 border-bottom border-secondary">
+        <div class="d-flex align-items-center gap-2">
+            <label class="small text-secondary">Animation FPS:</label>
+            <input type="number" name="fps" value="10" min="1" max="60" class="form-control form-control-sm" style="width: 75px;">
+            <div class="form-check ms-2">
+                <input class="form-check-input" type="checkbox" name="loop" id="loopCheck" checked>
+                <label class="form-check-label small" for="loopCheck">Loop</label>
+            </div>
+        </div>
+        <button type="submit" class="btn btn-success btn-sm">Animate Checked Frames</button>
+    </div>
+
+    <div class="row g-3">
+        {% for file in files %}
+        <div class="col-6 col-sm-4 text-center">
+            <div class="p-2 border border-secondary rounded bg-dark">
+                <img src="{{ url_for('web.uploaded_file', filename=file) }}"
+                     alt="{{ file }}"
+                     class="pixel-preview mb-2 rounded">
+                <div class="form-check text-truncate small mb-2">
+                    <input class="form-check-input" type="checkbox" name="filenames" value="{{ file }}" id="chk-{{ loop.index }}">
+                    <label class="form-check-label" for="chk-{{ loop.index }}" title="{{ file }}">{{ file }}</label>
+                </div>
+                <button type="button"
+                        class="btn btn-outline-info btn-sm w-100"
+                        hx-post="{{ url_for('web.ui_display_static', filename=file) }}"
+                        hx-target="#status-banner"
+                        hx-swap="outerHTML">
+                    Display Now
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</form>
+{% else %}
+<p class="text-secondary small mb-0">No images uploaded yet. Upload 64x32 PNGs or animated GIFs above.</p>
+{% endif %}
