@@ -1,6 +1,34 @@
 from abc import ABC, abstractmethod
-from PIL import Image
+from PIL import Image, ImageOps
 
+def fit_to_matrix(img: Image.Image, width: int, height: int, mode: str = "pad") -> Image.Image:
+    """
+    Resizes an image to fit the target matrix dimensions using crisp pixel scaling.
+    - 'pad': Preserves aspect ratio and centers with black (off) LEDs if ratio differs.
+    - 'stretch': Forces image to fill full width x height.
+    - 'center': Keeps 1:1 original pixel size if smaller than matrix, centered on black.
+    """
+    rgb_img = img.convert("RGB")
+    if rgb_img.size == (width, height):
+        return rgb_img
+
+    if mode == "stretch":
+        return rgb_img.resize((width, height), Image.Resampling.NEAREST)
+    elif mode == "center" and rgb_img.width <= width and rgb_img.height <= height:
+        canvas = Image.new("RGB", (width, height), (0, 0, 0))
+        x = (width - rgb_img.width) // 2
+        y = (height - rgb_img.height) // 2
+        canvas.paste(rgb_img, (x, y))
+        return canvas
+    else:
+        # Default 'pad': scales up/down to fit while preserving aspect ratio
+        return ImageOps.pad(
+            rgb_img,
+            (width, height),
+            method=Image.Resampling.NEAREST,
+            color=(0, 0, 0),
+            centering=(0.5, 0.5),
+        )
 
 class DisplayTask(ABC):
     @abstractmethod
@@ -27,7 +55,7 @@ class StaticImageTask(DisplayTask):
 
     def setup(self, width: int, height: int) -> None:
         with Image.open(self.image_path) as img:
-            self.frame = img.convert("RGB").resize((width, height), Image.Resampling.NEAREST)
+            self.frame = fit_to_matrix(img, width, height, mode="pad")
 
     def render_next_frame(self) -> tuple[Image.Image | None, float]:
         return self.frame, 0.0
