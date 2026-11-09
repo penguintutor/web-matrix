@@ -36,13 +36,6 @@ class MatrixEngine:
         self.active_label: str = "Idle"
 
     def init_hardware(self, config_obj) -> None:
-        """
-        Must be called FIRST while the process still has root privileges.
-        After RGBMatrix(options) completes, root privileges are dropped if configured.
-        """
-        self.width = config_obj.MATRIX_COLS * config_obj.MATRIX_CHAIN_LENGTH
-        self.height = config_obj.MATRIX_ROWS * config_obj.MATRIX_PARALLEL
-
         if HARDWARE_AVAILABLE:
             options = RGBMatrixOptions()
             options.rows = config_obj.MATRIX_ROWS
@@ -52,8 +45,14 @@ class MatrixEngine:
             options.hardware_mapping = config_obj.MATRIX_HARDWARE_MAPPING
             options.brightness = config_obj.MATRIX_BRIGHTNESS
             options.gpio_slowdown = config_obj.MATRIX_GPIO_SLOWDOWN
+            # Performance improvements
+            options.pwm_bits = 8                # Default is 11; 7 or 8 frees huge CPU time on Pi Zero W
+            options.pwm_lsb_nanoseconds = 200   # Default is 130; slightly higher reduces CPU interrupt load
 
-            # Configure privilege dropping so Flask runs as unprivileged user
+            # Apply U-mapper (or Rotate:180, etc.) if configured
+            if getattr(config_obj, "MATRIX_PIXEL_MAPPER", ""):
+                options.pixel_mapper_config = config_obj.MATRIX_PIXEL_MAPPER
+
             options.drop_privileges = config_obj.DROP_PRIVILEGES
             if config_obj.DROP_PRIV_USER:
                 options.drop_priv_user = config_obj.DROP_PRIV_USER
@@ -62,15 +61,26 @@ class MatrixEngine:
 
             self.matrix = RGBMatrix(options=options)
             self.canvas = self.matrix.CreateFrameCanvas()
+
+            # Read true logical canvas dimensions directly from the C++ library
+            # (e.g., returns 128x64 when 4x 64x32 panels use "U-mapper")
+            self.width = self.matrix.width
+            self.height = self.matrix.height
             logger.info(f"Initialized RGBMatrix ({self.width}x{self.height})")
         else:
+            self.width = getattr(config_obj, "MOCK_WIDTH", 64)
+            self.height = getattr(config_obj, "MOCK_HEIGHT", 32)
             logger.info(f"Mock Matrix initialized ({self.width}x{self.height})")
 
-        # Start the background render daemon thread
+        # Re-initialize preview buffer to match resolved dimensions
+        with self._frame_lock:
+            self._current_frame = Image.new("RGB", (self.width, self.height), (0, 0, 0))
+
         self._worker_thread = threading.Thread(
             target=self._render_loop, name="MatrixRenderThread", daemon=True
         )
         self._worker_thread.start()
+
 
     def set_task(self, task: DisplayTask, label: str = "Custom Display") -> None:
         """Thread-safe method called by Flask routes or APScheduler to switch displays."""

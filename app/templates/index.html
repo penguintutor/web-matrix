@@ -189,10 +189,10 @@
 
 <script>
     setInterval(() => {
-        const img = document.getElementById("live-matrix-preview");
-        if (img && !document.hidden) {
-            img.src = "{{ url_for('web.ui_live_preview') }}?t=" + Date.now();
-        }
-    }, 750);
+    const img = document.getElementById("live-matrix-preview");
+    if (img && !document.hidden) {
+        img.src = "{{ url_for('web.ui_live_preview') }}?t=" + Date.now();
+    }
+}, 3000);
 </script>
 {% endblock %}
