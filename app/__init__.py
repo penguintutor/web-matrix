@@ -10,6 +10,7 @@ from app.blueprints.schedule_bp import schedule_bp
 from app.blueprints.web_bp import web_bp
 from app.core.presets import preset_manager
 from app.core.serial_controller import serial_controller
+from app.core.sequences import sequence_manager
 
 
 def create_app(config_class=Config) -> Flask:
@@ -19,7 +20,9 @@ def create_app(config_class=Config) -> Flask:
     # Ensure writable directories exist (created after privilege drop)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     os.makedirs(os.path.join(os.path.dirname(app.root_path), "instance"), exist_ok=True)
-
+    os.makedirs(app.config["IMAGES_FOLDER"], exist_ok=True)
+    os.makedirs(app.config["SEQUENCES_FOLDER"], exist_ok=True)
+    sequence_manager.init_app(app.config["SEQUENCES_FOLDER"])
     os.makedirs(app.config["FONTS_FOLDER"], exist_ok=True)
     preset_manager.init_app(app.config["PRESETS_FILE"], app.config["UPLOAD_FOLDER"])
     if app.config.get("SERIAL_ENABLED"):

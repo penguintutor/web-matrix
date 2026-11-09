@@ -4,6 +4,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from app.core.matrix_engine import matrix_engine
 from app.core.tasks import StaticImageTask, AnimationTask, PluginTask, ClearTask
+from app.core.sequences import sequence_manager
 from app.plugins import PLUGIN_REGISTRY
 
 logger = logging.getLogger(__name__)
@@ -17,15 +18,12 @@ def execute_scheduled_display(task_type: str, payload: dict) -> None:
     """
     logger.info(f"Executing scheduled display: type={task_type}, payload={payload}")
     if task_type == "static":
-        matrix_engine.set_task(StaticImageTask(payload["image_path"]))
-    elif task_type == "animation":
-        matrix_engine.set_task(
-            AnimationTask(
-                image_paths=payload["image_paths"],
-                fps=payload.get("fps", 10.0),
-                loop=payload.get("loop", True),
-            )
-        )
+        matrix_engine.set_task(StaticImageTask(payload["image_path"]), label=payload.get("filename", "Image"))
+    elif task_type == "sequence":
+        seq_name = payload["sequence_name"]
+        task = sequence_manager.build_task(seq_name)
+        if task:
+            matrix_engine.set_task(task, label=seq_name)
     elif task_type == "plugin":
         plugin_name = payload["plugin_name"]
         plugin_cls = PLUGIN_REGISTRY.get(plugin_name)

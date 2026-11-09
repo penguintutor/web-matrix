@@ -2,41 +2,43 @@ import os
 from datetime import datetime
 from flask import (
     Blueprint,
+    Response,
     render_template,
     request,
+    redirect,
+    url_for,
     current_app,
     send_from_directory,
-    Response
+    abort,
 )
 from werkzeug.utils import secure_filename
 from app.core.matrix_engine import matrix_engine
-from app.core.tasks import StaticImageTask, AnimationTask, PluginTask
+from app.core.tasks import StaticImageTask, PluginTask
+from app.core.sequences import sequence_manager, ALLOWED_EXTENSIONS, natural_sort_key
 from app.core.scheduler import scheduler, schedule_display_at
-from app.plugins import PLUGIN_REGISTRY
 from app.core.presets import preset_manager
 from app.core.serial_controller import serial_controller
+from app.plugins import PLUGIN_REGISTRY
 
 web_bp = Blueprint("web", __name__)
 
-ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp"}
-
 
 def hex_to_rgb(hex_str: str) -> list[int]:
-    """Convert HTML color input (#rrggbb) to [R, G, B] list."""
     h = hex_str.lstrip("#")
-    if len(h) == 6:
-        return [int(h[i : i + 2], 16) for i in (0, 2, 4)]
-    return [255, 0, 0]
+    return [int(h[i : i + 2], 16) for i in (0, 2, 4)] if len(h) == 6 else [255, 0, 0]
 
 
-def get_uploaded_files() -> list[str]:
-    upload_dir = current_app.config["UPLOAD_FOLDER"]
-    if not os.path.exists(upload_dir):
+def get_static_images() -> list[str]:
+    img_dir = current_app.config["IMAGES_FOLDER"]
+    if not os.path.exists(img_dir):
         return []
     return sorted(
-        f
-        for f in os.listdir(upload_dir)
-        if os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS
+        (
+            f
+            for f in os.listdir(img_dir)
+            if os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS
+        ),
+        key=natural_sort_key,
     )
 
 
@@ -59,7 +61,6 @@ def get_formatted_jobs() -> list[dict]:
 
 
 def render_status_alert(message: str, level: str = "success", oob: bool = False) -> str:
-    """Returns a Bootstrap alert fragment (optionally with hx-swap-oob)."""
     oob_attr = 'hx-swap-oob="true"' if oob else ""
     return (
         f'<div id="status-banner" {oob_attr}>'
@@ -70,78 +71,184 @@ def render_status_alert(message: str, level: str = "success", oob: bool = False)
     )
 
 
+# --- Main Dashboard & Asset Serving ---
+
 @web_bp.route("/")
 def index():
     return render_template(
         "index.html",
-        files=get_uploaded_files(),
+        images=get_static_images(),
+        sequences=sequence_manager.list_sequences(),
         plugins=PLUGIN_REGISTRY,
         jobs=get_formatted_jobs(),
     )
 
 
-@web_bp.route("/uploads/<path:filename>")
-def uploaded_file(filename: str):
-    """Serve uploaded images so the dashboard can render pixel-art thumbnails."""
-    return send_from_directory(current_app.config["UPLOAD_FOLDER"], filename)
+@web_bp.route("/media/images/<path:filename>")
+def serve_static_image(filename: str):
+    return send_from_directory(current_app.config["IMAGES_FOLDER"], filename)
 
 
-# --- HTMX Media & Immediate Display Endpoints ---
+@web_bp.route("/media/sequences/<seq_name>/<path:filename>")
+def serve_sequence_frame(seq_name: str, filename: str):
+    seq_dir = os.path.join(current_app.config["SEQUENCES_FOLDER"], secure_filename(seq_name))
+    return send_from_directory(seq_dir, filename)
 
-@web_bp.route("/ui/upload", methods=["POST"])
-def ui_upload_files():
+
+@web_bp.route("/ui/preview.png")
+def ui_live_preview():
+    png_bytes = matrix_engine.get_preview_png()
+    return Response(png_bytes, mimetype="image/png", headers={"Cache-Control": "no-store"})
+
+
+# --- Individual Static Image Endpoints ---
+
+@web_bp.route("/ui/images/upload", methods=["POST"])
+def ui_upload_images():
     uploaded = request.files.getlist("files")
-    upload_dir = current_app.config["UPLOAD_FOLDER"]
-    saved_count = 0
-
+    img_dir = current_app.config["IMAGES_FOLDER"]
+    saved = 0
     for file in uploaded:
         if file and file.filename:
             ext = os.path.splitext(file.filename)[1].lower()
             if ext in ALLOWED_EXTENSIONS:
-                filename = secure_filename(file.filename)
-                file.save(os.path.join(upload_dir, filename))
-                saved_count += 1
+                fname = secure_filename(os.path.basename(file.filename))
+                file.save(os.path.join(img_dir, fname))
+                saved += 1
 
-    media_html = render_template("partials/media_list.html", files=get_uploaded_files())
-    alert_html = render_status_alert(f"Uploaded {saved_count} file(s).", "info", oob=True)
-    return media_html + alert_html
+    html = render_template("partials/image_list.html", images=get_static_images())
+    return html + render_status_alert(f"Uploaded {saved} individual image(s).", "info", oob=True)
 
 
 @web_bp.route("/ui/display/static/<filename>", methods=["POST"])
 def ui_display_static(filename: str):
     safe_name = secure_filename(filename)
-    path = os.path.join(current_app.config["UPLOAD_FOLDER"], safe_name)
+    path = os.path.join(current_app.config["IMAGES_FOLDER"], safe_name)
     if not os.path.isfile(path):
-        return render_status_alert(f"File '{safe_name}' not found.", "danger")
+        return render_status_alert(f"Image '{safe_name}' not found.", "danger")
 
-    # If the file is an animated GIF, run it via AnimationTask automatically
-    if safe_name.lower().endswith(".gif"):
-        matrix_engine.set_task(AnimationTask([path], fps=12.0, loop=True))
-        return render_status_alert(f"Playing GIF animation: {safe_name}")
-
-    matrix_engine.set_task(StaticImageTask(path))
+    matrix_engine.set_task(StaticImageTask(path), label=safe_name)
+    serial_controller.send_preset_list()
     return render_status_alert(f"Displaying static image: {safe_name}")
 
 
-@web_bp.route("/ui/display/animation", methods=["POST"])
-def ui_display_animation():
-    selected_files = request.form.getlist("filenames")
-    fps = float(request.form.get("fps", 10.0))
+@web_bp.route("/ui/images/delete/<filename>", methods=["DELETE"])
+def ui_delete_static(filename: str):
+    safe_name = secure_filename(filename)
+    path = os.path.join(current_app.config["IMAGES_FOLDER"], safe_name)
+    if os.path.isfile(path):
+        os.remove(path)
+    html = render_template("partials/image_list.html", images=get_static_images())
+    return html + render_status_alert(f"Deleted image '{safe_name}'.", "secondary", oob=True)
+
+
+# --- Animation Sequence Endpoints & Separate Editor Page ---
+
+@web_bp.route("/sequences")
+def sequences_overview():
+    """Redirects to the first available sequence editor, or shows an empty upload page."""
+    seqs = sequence_manager.list_sequences()
+    if seqs:
+        return redirect(url_for("web.sequence_editor", seq_name=seqs[0]["name"]))
+    return render_template("sequence_editor.html", sequence=None, all_sequences=[])
+
+
+@web_bp.route("/sequences/<seq_name>")
+def sequence_editor(seq_name: str):
+    """Dedicated page for editing sequence default ms and per-frame ms overrides."""
+    seq = sequence_manager.get_sequence(seq_name)
+    if not seq:
+        abort(404)
+    return render_template(
+        "sequence_editor.html",
+        sequence=seq,
+        all_sequences=sequence_manager.list_sequences(),
+    )
+
+
+@web_bp.route("/ui/sequences/upload", methods=["POST"])
+def ui_upload_sequence_directory():
+    """
+    Accepts a directory upload (webkitdirectory) or multiple files,
+    creates/updates the sequence, and redirects to its Sequence Editor page.
+    """
+    seq_name = request.form.get("sequence_name", "").strip()
+    default_ms = int(request.form.get("default_duration_ms", 100))
+    uploaded = request.files.getlist("files")
+
+    # If sequence_name wasn't typed manually, infer it from the uploaded folder name
+    if not seq_name and uploaded and uploaded[0].filename:
+        parts = uploaded[0].filename.replace("\\", "/").split("/")
+        seq_name = parts[0] if len(parts) > 1 else "new_sequence"
+
+    safe_seq = secure_filename(seq_name) or "sequence"
+    sequence_manager.create_or_update_from_upload(
+        safe_seq, uploaded, default_duration_ms=default_ms
+    )
+
+    # Register in presets automatically so the Pico controller can select it
+    preset_manager.add_preset(
+        name=safe_seq, task_type="sequence", payload={"sequence_name": safe_seq}
+    )
+    serial_controller.send_preset_list()
+
+    return redirect(url_for("web.sequence_editor", seq_name=safe_seq))
+
+
+@web_bp.route("/ui/sequences/<seq_name>/save", methods=["POST"])
+def ui_save_sequence_timings(seq_name: str):
+    """Saves default_duration_ms, loop flag, and per-frame ms overrides."""
+    seq = sequence_manager.get_sequence(seq_name)
+    if not seq:
+        abort(404)
+
+    default_ms = int(request.form.get("default_duration_ms", 100))
     loop = "loop" in request.form
 
-    if not selected_files:
-        return render_status_alert("Select at least one image frame for the animation.", "warning")
+    overrides: dict[str, int | None] = {}
+    for frame in seq["frames"]:
+        fname = frame["filename"]
+        raw_val = request.form.get(f"override_{fname}", "").strip()
+        if raw_val.isdigit() and int(raw_val) > 0:
+            overrides[fname] = int(raw_val)
+        else:
+            overrides[fname] = None
 
-    upload_dir = current_app.config["UPLOAD_FOLDER"]
-    paths = [
-        os.path.join(upload_dir, secure_filename(fn))
-        for fn in selected_files
-        if os.path.isfile(os.path.join(upload_dir, secure_filename(fn)))
-    ]
+    sequence_manager.save_sequence_settings(seq_name, default_ms, loop, overrides)
 
-    matrix_engine.set_task(AnimationTask(image_paths=paths, fps=fps, loop=loop))
-    return render_status_alert(f"Running animation ({len(paths)} frames @ {fps} FPS).")
+    # If the user clicked "Save & Play on Matrix", trigger immediately
+    if request.form.get("action") == "save_and_play":
+        task = sequence_manager.build_task(seq_name)
+        if task:
+            matrix_engine.set_task(task, label=seq_name)
 
+    return redirect(url_for("web.sequence_editor", seq_name=seq_name, saved="1"))
+
+
+@web_bp.route("/ui/display/sequence/<seq_name>", methods=["POST"])
+def ui_display_sequence(seq_name: str):
+    task = sequence_manager.build_task(seq_name)
+    if not task:
+        return render_status_alert(f"Sequence '{seq_name}' is empty or not found.", "danger")
+
+    matrix_engine.set_task(task, label=seq_name)
+    serial_controller.send_preset_list()
+    return render_status_alert(f"Playing animation sequence: {seq_name}")
+
+
+@web_bp.route("/ui/sequences/<seq_name>/frame/<filename>", methods=["DELETE"])
+def ui_delete_sequence_frame(seq_name: str, filename: str):
+    sequence_manager.delete_frame(seq_name, filename)
+    return "", 200
+
+
+@web_bp.route("/ui/sequences/<seq_name>/delete", methods=["POST"])
+def ui_delete_sequence(seq_name: str):
+    sequence_manager.delete_sequence(seq_name)
+    return redirect(url_for("web.index"))
+
+
+# --- Plugin, Clear & Scheduler Endpoints ---
 
 @web_bp.route("/ui/display/plugin", methods=["POST"])
 def ui_display_plugin():
@@ -155,60 +262,53 @@ def ui_display_plugin():
         "color": hex_to_rgb(request.form.get("color", "#00ff80")),
         "bg_color": hex_to_rgb(request.form.get("bg_color", "#000000")),
         "fps": float(request.form.get("fps", 25.0)),
-        "font_size": int(request.form.get("font_size", 16)),
     }
-    matrix_engine.set_task(PluginTask(plugin_cls(), params))
+    matrix_engine.set_task(PluginTask(plugin_cls(), params), label=params["text"][:16])
     return render_status_alert(f"Running plugin '{plugin_name}': \"{params['text']}\"")
 
 
 @web_bp.route("/ui/display/clear", methods=["POST"])
 def ui_display_clear():
     matrix_engine.clear()
+    serial_controller.send_preset_list()
     return render_status_alert("Matrix display cleared.", "secondary")
 
-
-# --- HTMX Scheduler Endpoints ---
 
 @web_bp.route("/ui/schedule/add", methods=["POST"])
 def ui_schedule_add():
     run_at_str = request.form.get("run_at", "")
-    task_type = request.form.get("task_type", "plugin")
+    task_type = request.form.get("task_type", "sequence")
 
     try:
         run_date = datetime.fromisoformat(run_at_str)
     except ValueError:
         table_html = render_template("partials/schedule_list.html", jobs=get_formatted_jobs())
-        alert_html = render_status_alert("Invalid date/time selected.", "danger", oob=True)
-        return table_html + alert_html
+        return table_html + render_status_alert("Invalid date/time.", "danger", oob=True)
 
-    upload_dir = current_app.config["UPLOAD_FOLDER"]
     payload = {}
-
     if task_type == "static":
         fn = secure_filename(request.form.get("static_filename", ""))
-        payload = {"filename": fn, "image_path": os.path.join(upload_dir, fn)}
-    elif task_type == "animation":
-        fns = [secure_filename(f) for f in request.form.getlist("anim_filenames")]
         payload = {
-            "filenames": fns,
-            "image_paths": [os.path.join(upload_dir, f) for f in fns],
-            "fps": float(request.form.get("anim_fps", 10.0)),
-            "loop": True,
+            "filename": fn,
+            "image_path": os.path.join(current_app.config["IMAGES_FOLDER"], fn),
         }
+    elif task_type == "sequence":
+        seq_name = secure_filename(request.form.get("sequence_name", ""))
+        payload = {"sequence_name": seq_name}
     elif task_type == "plugin":
         payload = {
-            "plugin_name": request.form.get("plugin_name", "text_scroller"),
+            "plugin_name": "text_scroller",
             "params": {
                 "text": request.form.get("plugin_text", "Scheduled Message"),
                 "color": hex_to_rgb(request.form.get("plugin_color", "#ff0000")),
-                "fps": float(request.form.get("plugin_fps", 25.0)),
+                "fps": 25.0,
             },
         }
 
     job_id = schedule_display_at(run_date, task_type, payload)
     table_html = render_template("partials/schedule_list.html", jobs=get_formatted_jobs())
     alert_html = render_status_alert(
-        f"Scheduled '{task_type}' job ({job_id[:8]}) for {run_date.strftime('%Y-%m-%d %H:%M')}.",
+        f"Scheduled '{task_type}' ({job_id[:8]}) for {run_date.strftime('%Y-%m-%d %H:%M')}.",
         "success",
         oob=True,
     )
@@ -220,19 +320,4 @@ def ui_schedule_delete(job_id: str):
     if scheduler.get_job(job_id):
         scheduler.remove_job(job_id)
     table_html = render_template("partials/schedule_list.html", jobs=get_formatted_jobs())
-    alert_html = render_status_alert(f"Removed scheduled job {job_id[:8]}.", "secondary", oob=True)
-
-    return table_html + alert_html
-
-
-@web_bp.route("/ui/preview.png")
-def ui_live_preview():
-    """Serves the current 64x32 matrix frame as a PNG image."""
-    png_bytes = matrix_engine.get_preview_png()
-    return Response(png_bytes, mimetype="image/png", headers={"Cache-Control": "no-store"})
-
-@web_bp.route("/ui/presets/run/<int:index>", methods=["POST"])
-def ui_run_preset(index: int):
-    name = preset_manager.trigger_preset(index)
-    serial_controller.send_preset_list()  # Sync Pico OLED status
-    return render_status_alert(f"Activated preset: {name}")
+    return table_html + render_status_alert(f"Removed job {job_id[:8]}.", "secondary", oob=True)

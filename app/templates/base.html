@@ -20,22 +20,26 @@
 <body class="bg-body-tertiary">
     <nav class="navbar navbar-expand-lg bg-dark border-bottom border-secondary mb-3">
         <div class="container">
-            <span class="navbar-brand fw-bold text-info">64x32 RGB Matrix Daemon</span>
-            <div class="d-flex align-items-center gap-3">
-                <button class="btn btn-outline-danger btn-sm"
-                        hx-post="{{ url_for('web.ui_display_clear') }}"
-                        hx-target="#status-banner"
-                        hx-swap="outerHTML">
-                    Clear Matrix
-                </button>
+            <a class="navbar-brand fw-bold text-info" href="{{ url_for('web.index') }}">64x32 Matrix Daemon</a>
+            <div class="navbar-nav me-auto flex-row gap-3">
+                <a class="nav-link {% if request.endpoint == 'web.index' %}active text-white fw-semibold{% endif %}"
+                   href="{{ url_for('web.index') }}">Dashboard</a>
+                <a class="nav-link {% if 'sequence' in request.endpoint %}active text-warning fw-semibold{% endif %}"
+                   href="{{ url_for('web.sequences_overview') }}">Sequence Editor</a>
             </div>
+            <button class="btn btn-outline-danger btn-sm"
+                    hx-post="{{ url_for('web.ui_display_clear') }}"
+                    hx-target="#status-banner"
+                    hx-swap="outerHTML">
+                Clear Matrix
+            </button>
         </div>
     </nav>
 
     <main class="container pb-5">
         <div id="status-banner" class="mb-3">
             <div class="alert alert-secondary py-2 mb-0">
-                <strong>Matrix Status:</strong> Ready.
+                <strong>Matrix Status:</strong> Active ({{ matrix_engine.active_label if matrix_engine is defined else 'Ready' }})
             </div>
         </div>
         {% block content %}{% endblock %}

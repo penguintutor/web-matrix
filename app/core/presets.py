@@ -4,6 +4,7 @@ import logging
 from app.core.matrix_engine import matrix_engine
 from app.core.tasks import StaticImageTask, AnimationTask, PluginTask, ClearTask
 from app.plugins import PLUGIN_REGISTRY
+from app.core.sequences import sequence_manager
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,11 @@ class PresetManager:
                 AnimationTask(paths, fps=payload.get("fps", 10.0), loop=payload.get("loop", True)),
                 label=name,
             )
+        elif t_type == "sequence":
+            seq_name = payload["sequence_name"]
+            task = sequence_manager.build_task(seq_name)
+            if task:
+                matrix_engine.set_task(task, label=seq_name)
         elif t_type == "plugin":
             plugin_cls = PLUGIN_REGISTRY.get(payload.get("plugin_name", "text_scroller"))
             if plugin_cls:

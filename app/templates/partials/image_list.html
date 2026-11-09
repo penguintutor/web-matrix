@@ -1,0 +1,29 @@
+{% if images %}
+<div class="row g-3">
+    {% for img in images %}
+    <div class="col-6 col-sm-4 text-center">
+        <div class="p-2 border border-secondary rounded bg-dark position-relative">
+            <button type="button"
+                    class="btn btn-sm btn-link text-danger position-absolute top-0 end-0 p-1 text-decoration-none"
+                    title="Delete image"
+                    hx-delete="{{ url_for('web.ui_delete_static', filename=img) }}"
+                    hx-target="#images-container"
+                    hx-confirm="Delete {{ img }}?">&times;</button>
+            <img src="{{ url_for('web.serve_static_image', filename=img) }}"
+                 alt="{{ img }}"
+                 class="pixel-preview mb-2 rounded">
+            <div class="small text-truncate mb-2 font-monospace" title="{{ img }}">{{ img }}</div>
+            <button type="button"
+                    class="btn btn-outline-info btn-sm w-100"
+                    hx-post="{{ url_for('web.ui_display_static', filename=img) }}"
+                    hx-target="#status-banner"
+                    hx-swap="outerHTML">
+                Display Image
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="text-secondary small mb-0">No individual images uploaded yet.</p>
+{% endif %}

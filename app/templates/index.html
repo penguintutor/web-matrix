@@ -1,91 +1,120 @@
 {% extends "base.html" %}
 
-<div class="card shadow-sm mb-4 bg-black border-info">
-    <div class="card-body d-flex align-items-center justify-content-between">
-        <div>
-            <h6 class="text-info mb-1">Live 64x32 Matrix Output</h6>
-            <span class="small text-secondary">Mirrors current hardware frame buffer</span>
-        </div>
-        <img id="live-matrix-preview"
-             src="{{ url_for('web.ui_live_preview') }}"
-             class="pixel-preview"
-             style="width: 256px; height: 128px; border: 2px solid #0dcaf0;"
-             alt="Live Matrix Preview">
-    </div>
-</div>
-<script>
-    setInterval(() => {
-        const img = document.getElementById("live-matrix-preview");
-        if (img && !document.hidden) {
-            img.src = "{{ url_for('web.ui_live_preview') }}?t=" + Date.now();
-        }
-    }, 750);
-</script>
-
 {% block content %}
 <div class="row g-4">
-    <!-- Left Column: Plugins & Media Library -->
+    <!-- Left Column: Animation Sequences & Individual Images -->
     <div class="col-lg-7">
-        <!-- Live Plugin Launcher -->
-        <div class="card shadow-sm mb-4">
-            <div class="card-header fw-semibold text-info">Run Live Text / Plugin</div>
+        <!-- 1. Animation Sequences Card -->
+        <div class="card shadow-sm mb-4 border-warning">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-semibold text-warning">Animation Sequences</span>
+                <a href="{{ url_for('web.sequences_overview') }}" class="btn btn-outline-warning btn-sm">
+                    Open Sequence Editor &rarr;
+                </a>
+            </div>
             <div class="card-body">
-                <form hx-post="{{ url_for('web.ui_display_plugin') }}"
-                      hx-target="#status-banner"
-                      hx-swap="outerHTML"
-                      class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label small">Plugin</label>
-                        <select name="plugin_name" class="form-select form-select-sm">
-                            {% for name, cls in plugins.items() %}
-                            <option value="{{ name }}">{{ name }}</option>
-                            {% endfor %}
-                        </select>
+                <!-- Upload Directory Form -->
+                <form action="{{ url_for('web.ui_upload_sequence_directory') }}"
+                      method="POST"
+                      enctype="multipart/form-data"
+                      class="row g-2 align-items-end pb-3 mb-3 border-bottom border-secondary">
+                    <div class="col-sm-5">
+                        <label class="form-label small text-secondary mb-1">Select Folder of Frames</label>
+                        <input type="file" name="files" id="dirInput"
+                               webkitdirectory directory multiple required
+                               class="form-control form-control-sm"
+                               onchange="if(this.files.length > 0 && !document.getElementById('seqNameInput').value) {
+                                   document.getElementById('seqNameInput').value = this.files[0].webkitRelativePath.split('/')[0];
+                               }">
                     </div>
-                    <div class="col-md-8">
-                        <label class="form-label small">Message Text</label>
-                        <input type="text" name="text" class="form-control form-control-sm" value="Hello Silverstone!" required>
+                    <div class="col-sm-4">
+                        <label class="form-label small text-secondary mb-1">Sequence Name</label>
+                        <input type="text" name="sequence_name" id="seqNameInput"
+                               class="form-control form-control-sm" placeholder="e.g. racecar_xmas" required>
                     </div>
-                    <div class="col-4 col-md-3">
-                        <label class="form-label small">Text Color</label>
-                        <input type="color" name="color" class="form-control form-control-color w-100" value="#00ff80">
-                    </div>
-                    <div class="col-4 col-md-3">
-                        <label class="form-label small">Background</label>
-                        <input type="color" name="bg_color" class="form-control form-control-color w-100" value="#000000">
-                    </div>
-                    <div class="col-4 col-md-3">
-                        <label class="form-label small">Speed (FPS)</label>
-                        <input type="number" name="fps" class="form-control form-control-sm" value="25" min="1" max="60">
-                    </div>
-                    <div class="col-12 col-md-3 d-flex align-items-end">
-                        <button type="submit" class="btn btn-info btn-sm w-100 fw-semibold">Send to Matrix</button>
+                    <div class="col-sm-3">
+                        <label class="form-label small text-secondary mb-1">Default (ms)</label>
+                        <div class="input-group input-group-sm">
+                            <input type="number" name="default_duration_ms" value="100" min="10" step="10" class="form-control">
+                            <button type="submit" class="btn btn-warning fw-semibold">Import</button>
+                        </div>
                     </div>
                 </form>
+
+                <!-- Existing Sequences List -->
+                {% if sequences %}
+                <div class="row g-3">
+                    {% for seq in sequences %}
+                    <div class="col-6 col-sm-4 text-center">
+                        <div class="p-2 border border-secondary rounded bg-dark">
+                            {% if seq.first_frame %}
+                            <img src="{{ url_for('web.serve_sequence_frame', seq_name=seq.name, filename=seq.first_frame) }}"
+                                 class="pixel-preview mb-2 rounded" alt="{{ seq.name }}">
+                            {% endif %}
+                            <div class="fw-semibold small text-truncate">{{ seq.name }}</div>
+                            <div class="text-secondary" style="font-size: 0.75rem;">
+                                {{ seq.frames|length }} frames &bull; {{ seq.total_duration_ms }} ms
+                            </div>
+                            <div class="d-flex gap-1 mt-2">
+                                <button type="button"
+                                        class="btn btn-warning btn-sm flex-grow-1 fw-semibold"
+                                        hx-post="{{ url_for('web.ui_display_sequence', seq_name=seq.name) }}"
+                                        hx-target="#status-banner"
+                                        hx-swap="outerHTML">
+                                    Play
+                                </button>
+                                <a href="{{ url_for('web.sequence_editor', seq_name=seq.name) }}"
+                                   class="btn btn-outline-light btn-sm" title="Edit Frame Timings">
+                                    Edit
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-secondary small mb-0">No sequences yet. Choose a directory above to import frames.</p>
+                {% endif %}
             </div>
         </div>
 
-        <!-- Image & Animation Upload + Gallery -->
+        <!-- 2. Individual Static Images Card -->
         <div class="card shadow-sm">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span class="fw-semibold text-info">Media Library & Frame Animator</span>
-                <form hx-post="{{ url_for('web.ui_upload_files') }}"
+                <span class="fw-semibold text-info">Individual Static Images</span>
+                <form hx-post="{{ url_for('web.ui_upload_images') }}"
                       hx-encoding="multipart/form-data"
-                      hx-target="#media-container"
+                      hx-target="#images-container"
                       class="d-flex gap-2 align-items-center m-0">
-                    <input type="file" name="files" multiple accept=".png,.jpg,.jpeg,.gif,.bmp"
+                    <input type="file" name="files" multiple accept=".png,.jpg,.jpeg,.bmp,.gif"
                            class="form-control form-control-sm" required>
-                    <button type="submit" class="btn btn-primary btn-sm text-nowrap">Upload</button>
+                    <button type="submit" class="btn btn-info btn-sm text-nowrap fw-semibold">Upload Image(s)</button>
                 </form>
             </div>
-            <div class="card-body" id="media-container">
-                {% include "partials/media_list.html" %}
+            <div class="card-body" id="images-container">
+                {% include "partials/image_list.html" %}
             </div>
         </div>
     </div>
 
-    <!-- Right Column: Future Scheduler & Job Queue -->
+    <!-- Right Column: Live Preview, Plugins & Scheduler -->
     <div class="col-lg-5">
+        <!-- Live Matrix Preview -->
+        <div class="card shadow-sm mb-4 bg-black border-info">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div>
+                    <h6 class="text-info mb-1">Live 64x32 Matrix Preview</h6>
+                    <span class="small text-secondary">Active buffer output</span>
+                </div>
+                <img id="live-matrix-preview"
+                     src="{{ url_for('web.ui_live_preview') }}"
+                     class="pixel-preview"
+                     style="width: 192px; height: 96px; border: 2px solid #0dcaf0;"
+                     alt="Live Matrix Preview">
+            </div>
+        </div>
+
+        <!-- Schedule Future Display -->
         <div class="card shadow-sm mb-4">
             <div class="card-header fw-semibold text-warning">Schedule Future Display</div>
             <div class="card-body">
@@ -101,35 +130,40 @@
                         <select name="task_type" class="form-select form-select-sm"
                                 onchange="document.querySelectorAll('.sched-fields').forEach(el => el.classList.add('d-none'));
                                           document.getElementById('sched-' + this.value).classList.remove('d-none');">
-                            <option value="plugin" selected>Plugin (Text)</option>
-                            <option value="static">Static Image / GIF</option>
-                            <option value="animation">Frame Sequence</option>
+                            <option value="sequence" selected>Animation Sequence</option>
+                            <option value="static">Individual Image</option>
+                            <option value="plugin">Scrolling Text</option>
                             <option value="clear">Clear Matrix</option>
                         </select>
                     </div>
 
-                    <!-- Plugin Schedule Fields -->
-                    <div id="sched-plugin" class="sched-fields col-12 row g-2 m-0 p-0">
+                    <div id="sched-sequence" class="sched-fields col-12">
+                        <label class="form-label small">Select Animation Sequence</label>
+                        <select name="sequence_name" class="form-select form-select-sm">
+                            {% for seq in sequences %}
+                            <option value="{{ seq.name }}">{{ seq.name }} ({{ seq.frames|length }} frames)</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div id="sched-static" class="sched-fields col-12 d-none">
+                        <label class="form-label small">Select Individual Image</label>
+                        <select name="static_filename" class="form-select form-select-sm">
+                            {% for img in images %}
+                            <option value="{{ img }}">{{ img }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div id="sched-plugin" class="sched-fields col-12 row g-2 m-0 p-0 d-none">
                         <div class="col-8">
-                            <label class="form-label small">Scheduled Text</label>
+                            <label class="form-label small">Message</label>
                             <input type="text" name="plugin_text" class="form-control form-control-sm" value="Scheduled Alert!">
                         </div>
                         <div class="col-4">
                             <label class="form-label small">Color</label>
                             <input type="color" name="plugin_color" class="form-control form-control-color w-100" value="#ff0000">
                         </div>
-                    </div>
-
-                    <!-- Static Image Schedule Fields -->
-                    <div id="sched-static" class="sched-fields col-12 d-none">
-                        <label class="form-label small">Filename (from Media Library)</label>
-                        <input type="text" name="static_filename" class="form-control form-control-sm" placeholder="e.g. logo.png">
-                    </div>
-
-                    <!-- Animation Schedule Fields -->
-                    <div id="sched-animation" class="sched-fields col-12 d-none">
-                        <label class="form-label small">Hold Ctrl/Cmd to select frames in Media Library or enter FPS</label>
-                        <input type="number" name="anim_fps" class="form-control form-control-sm" value="10" placeholder="FPS">
                     </div>
 
                     <div id="sched-clear" class="sched-fields col-12 d-none">
@@ -143,7 +177,7 @@
             </div>
         </div>
 
-        <!-- Persistent Schedule Queue Table -->
+        <!-- Scheduled Jobs Queue -->
         <div class="card shadow-sm">
             <div class="card-header fw-semibold text-warning">Scheduled Jobs Queue</div>
             <div class="card-body p-0" id="schedule-container">
@@ -152,4 +186,13 @@
         </div>
     </div>
 </div>
+
+<script>
+    setInterval(() => {
+        const img = document.getElementById("live-matrix-preview");
+        if (img && !document.hidden) {
+            img.src = "{{ url_for('web.ui_live_preview') }}?t=" + Date.now();
+        }
+    }, 750);
+</script>
 {% endblock %}

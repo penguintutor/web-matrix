@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Left Sidebar: Sequence Selector & Directory Uploader -->
+    <div class="col-lg-3">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header fw-semibold text-warning">Animation Sequences</div>
+            <div class="list-group list-group-flush">
+                {% for seq in all_sequences %}
+                <a href="{{ url_for('web.sequence_editor', seq_name=seq.name) }}"
+                   class="list-group-item list-group-item-action d-flex justify-content-between align-items-center
+                          {% if sequence and sequence.name == seq.name %}active bg-warning text-dark fw-bold border-warning{% endif %}">
+                    <span class="text-truncate">{{ seq.name }}</span>
+                    <span class="badge {% if sequence and sequence.name == seq.name %}bg-dark text-warning{% else %}bg-secondary{% endif %}">
+                        {{ seq.frames|length }}
+                    </span>
+                </a>
+                {% else %}
+                <div class="list-group-item text-secondary small">No sequences loaded.</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Import New Directory -->
+        <div class="card shadow-sm">
+            <div class="card-header fw-semibold small text-info">Import Directory as Sequence</div>
+            <div class="card-body">
+                <form action="{{ url_for('web.ui_upload_sequence_directory') }}"
+                      method="POST"
+                      enctype="multipart/form-data">
+                    <div class="mb-2">
+                        <label class="form-label small">Choose Directory</label>
+                        <input type="file" name="files" webkitdirectory directory multiple required
+                               class="form-control form-control-sm"
+                               onchange="if(this.files.length > 0 && !document.getElementById('newSeqName').value) {
+                                   document.getElementById('newSeqName').value = this.files[0].webkitRelativePath.split('/')[0];
+                               }">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Sequence Name</label>
+                        <input type="text" name="sequence_name" id="newSeqName"
+                               class="form-control form-control-sm" placeholder="sequence_name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">Default Frame Duration (ms)</label>
+                        <input type="number" name="default_duration_ms" value="100" min="10" step="10"
+                               class="form-control form-control-sm">
+                    </div>
+                    <button type="submit" class="btn btn-info btn-sm w-100 fw-semibold">Upload Directory</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Editor Area -->
+    <div class="col-lg-9">
+        {% if sequence %}
+        {% if request.args.get('saved') %}
+        <div class="alert alert-success alert-dismissible fade show py-2 mb-3">
+            Saved millisecond timings for <strong>{{ sequence.name }}</strong> (Total cycle: {{ sequence.total_duration_ms }} ms).
+            <button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+
+        <form action="{{ url_for('web.ui_save_sequence_timings', seq_name=sequence.name) }}" method="POST">
+            <div class="card shadow-sm border-warning">
+                <!-- Sequence Header & Global Controls -->
+                <div class="card-header bg-dark d-flex flex-wrap justify-content-between align-items-center gap-3 py-3">
+                    <div>
+                        <h5 class="mb-0 text-warning fw-bold">{{ sequence.name }}</h5>
+                        <span class="small text-secondary">
+                            {{ sequence.frames|length }} frames ordered by filename &bull; Total cycle time: <strong>{{ sequence.total_duration_ms }} ms</strong>
+                        </span>
+                    </div>
+
+                    <div class="d-flex flex-wrap align-items-center gap-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <label class="small text-nowrap fw-semibold">Default Time (ms):</label>
+                            <input type="number" name="default_duration_ms" id="defaultMsInput"
+                                   value="{{ sequence.default_duration_ms }}" min="10" step="10"
+                                   class="form-control form-control-sm" style="width: 95px;"
+                                   oninput="document.querySelectorAll('.frame-override-input').forEach(el => el.placeholder = this.value + ' (default)')">
+                        </div>
+
+                        <div class="form-check mb-0">
+                            <input class="form-check-input" type="checkbox" name="loop" id="seqLoop"
+                                   {% if sequence.loop %}checked{% endif %}>
+                            <label class="form-check-label small" for="seqLoop">Loop Sequence</label>
+                        </div>
+
+                        <button type="submit" name="action" value="save" class="btn btn-outline-warning btn-sm fw-semibold">
+                            Save Timings
+                        </button>
+                        <button type="submit" name="action" value="save_and_play" class="btn btn-warning btn-sm fw-semibold">
+                            Save &amp; Play on Matrix
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Ordered Frames Grid with Per-Frame Millisecond Overrides -->
+                <div class="card-body">
+                    <p class="small text-secondary mb-3">
+                        Frames are sorted automatically by filename. Leave a frame's override box blank to use the sequence default
+                        (<strong>{{ sequence.default_duration_ms }} ms</strong>), or enter a custom duration in milliseconds to hold or speed up that specific frame.
+                    </p>
+
+                    <div class="row g-3">
+                        {% for frame in sequence.frames %}
+                        <div class="col-6 col-sm-4 col-md-3" id="frame-card-{{ loop.index }}">
+                            <div class="p-2 border {% if frame.override_ms %}border-warning{% else %}border-secondary{% endif %} rounded bg-dark text-center position-relative">
+                                <span class="badge bg-secondary position-absolute top-0 start-0 m-1">
+                                    #{{ loop.index }}
+                                </span>
+                                <button type="button"
+                                        class="btn btn-sm btn-link text-danger position-absolute top-0 end-0 p-1 text-decoration-none"
+                                        title="Remove frame from sequence"
+                                        hx-delete="{{ url_for('web.ui_delete_sequence_frame', seq_name=sequence.name, filename=frame.filename) }}"
+                                        hx-target="#frame-card-{{ loop.index }}"
+                                        hx-swap="outerHTML"
+                                        hx-confirm="Delete frame {{ frame.filename }}?">&times;</button>
+
+                                <img src="{{ url_for('web.serve_sequence_frame', seq_name=sequence.name, filename=frame.filename) }}"
+                                     alt="{{ frame.filename }}"
+                                     class="pixel-preview mt-3 mb-2 rounded">
+
+                                <div class="small font-monospace text-truncate mb-2" title="{{ frame.filename }}">
+                                    {{ frame.filename }}
+                                </div>
+
+                                <div class="input-group input-group-sm">
+                                    <input type="number"
+                                           name="override_{{ frame.filename }}"
+                                           value="{{ frame.override_ms if frame.override_ms is not none else '' }}"
+                                           placeholder="{{ sequence.default_duration_ms }} (default)"
+                                           min="10" step="10"
+                                           class="form-control frame-override-input {% if frame.override_ms %}border-warning text-warning fw-bold{% endif %}">
+                                    <span class="input-group-text">ms</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Card Footer: Delete Entire Sequence -->
+                <div class="card-footer d-flex justify-content-between align-items-center">
+                    <span class="small text-secondary">Manifest path: <code>uploads/sequences/{{ sequence.name }}/sequence.json</code></span>
+                    <button type="submit"
+                            formaction="{{ url_for('web.ui_delete_sequence', seq_name=sequence.name) }}"
+                            onclick="return confirm('Delete entire sequence {{ sequence.name }} and all its frames?');"
+                            class="btn btn-outline-danger btn-sm">
+                        Delete Entire Sequence
+                    </button>
+                </div>
+            </div>
+        </form>
+        {% else %}
+        <div class="card shadow-sm">
+            <div class="card-body text-center py-5 text-secondary">
+                <h5>No Animation Sequence Selected</h5>
+                <p class="small mb-0">Use the <strong>Import Directory as Sequence</strong> panel on the left to select a folder of ordered image frames.</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

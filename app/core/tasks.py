@@ -1,20 +1,14 @@
 from abc import ABC, abstractmethod
-from PIL import Image, ImageSequence
+from PIL import Image
+
 
 class DisplayTask(ABC):
-    """Abstract base class for anything rendered by MatrixEngine."""
-
     @abstractmethod
     def setup(self, width: int, height: int) -> None:
-        """Called once when the task becomes active."""
         pass
 
     @abstractmethod
     def render_next_frame(self) -> tuple[Image.Image | None, float]:
-        """
-        Returns (PIL.Image in 'RGB' mode, delay_in_seconds).
-        If delay_in_seconds is 0 or negative, the frame is static and waits indefinitely.
-        """
         pass
 
 
@@ -33,57 +27,52 @@ class StaticImageTask(DisplayTask):
 
     def setup(self, width: int, height: int) -> None:
         with Image.open(self.image_path) as img:
-            # Resize to fit matrix while converting to strict RGB
-            resized = img.convert("RGB").resize((width, height), Image.Resampling.NEAREST)
-            self.frame = resized
+            self.frame = img.convert("RGB").resize((width, height), Image.Resampling.NEAREST)
 
     def render_next_frame(self) -> tuple[Image.Image | None, float]:
-        # Return static frame and 0.0 delay (wait until interrupted)
         return self.frame, 0.0
 
 
 class AnimationTask(DisplayTask):
-    """Handles either a list of image paths or a multi-frame GIF."""
+    """
+    Plays an ordered sequence of frames where each frame has its own duration in milliseconds.
+    frame_schedule: list of (image_path, duration_ms) tuples.
+    """
 
-    def __init__(self, image_paths: list[str], fps: float = 10.0, loop: bool = True):
-        self.image_paths = image_paths
-        self.frame_delay = 1.0 / max(fps, 0.1)
+    def __init__(self, frame_schedule: list[tuple[str, int]], loop: bool = True):
+        self.frame_schedule = frame_schedule
         self.loop = loop
-        self.frames: list[Image.Image] = []
+        # Loaded in setup(): list of (PIL.Image, delay_seconds)
+        self.frames: list[tuple[Image.Image, float]] = []
         self.index = 0
 
     def setup(self, width: int, height: int) -> None:
         self.frames.clear()
         self.index = 0
-        for path in self.image_paths:
+        for path, duration_ms in self.frame_schedule:
+            delay_sec = max(int(duration_ms), 10) / 1000.0  # Minimum 10ms safety floor
             with Image.open(path) as img:
-                if getattr(img, "is_animated", False):
-                    for frame in ImageSequence.Iterator(img):
-                        f_rgb = frame.convert("RGB").resize((width, height), Image.Resampling.NEAREST)
-                        self.frames.append(f_rgb)
-                else:
-                    f_rgb = img.convert("RGB").resize((width, height), Image.Resampling.NEAREST)
-                    self.frames.append(f_rgb)
+                f_rgb = img.convert("RGB").resize((width, height), Image.Resampling.NEAREST)
+                self.frames.append((f_rgb, delay_sec))
 
     def render_next_frame(self) -> tuple[Image.Image | None, float]:
         if not self.frames:
             return None, 0.0
 
-        frame = self.frames[self.index]
+        frame_img, delay_sec = self.frames[self.index]
+
         if self.index + 1 < len(self.frames):
             self.index += 1
-            return frame, self.frame_delay
+            return frame_img, delay_sec
         elif self.loop:
             self.index = 0
-            return frame, self.frame_delay
+            return frame_img, delay_sec
         else:
-            # Hold on last frame
-            return frame, 0.0
+            # Non-looping sequence: hold indefinitely on the final frame
+            return frame_img, 0.0
 
 
 class PluginTask(DisplayTask):
-    """Wraps a dynamically loaded BasePlugin instance."""
-
     def __init__(self, plugin_instance, params: dict):
         self.plugin = plugin_instance
         self.params = params

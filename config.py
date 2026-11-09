@@ -5,11 +5,13 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-matrix-secret-key")
     UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+    IMAGES_FOLDER = os.path.join(UPLOAD_FOLDER, "images")   
+    SEQUENCES_FOLDER = os.path.join(UPLOAD_FOLDER, "sequences")
     FONTS_FOLDER = os.path.join(BASE_DIR, "fonts")  # Place .bdf fonts (e.g. 10x20.bdf) here
     PRESETS_FILE = os.path.join(BASE_DIR, "instance", "presets.json")
     JOBSTORE_PATH = f"sqlite:///{os.path.join(BASE_DIR, 'instance', 'jobs.sqlite')}"
 
-# --- Serial Physical Controller (Pico) ---
+    # --- Serial Physical Controller (Pico) ---
     SERIAL_ENABLED = True
     SERIAL_PORT = "/dev/serial0"  # Use "/dev/ttyACM0" if connecting Pico via USB
     SERIAL_BAUD = 115200
