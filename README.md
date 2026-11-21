@@ -27,12 +27,16 @@ Note there will be some warnings during install of the pre-requisites. This is d
 
 ## Start the server automatically
 
+
+
 ### Automatic Startup (systemd)
 
 To configure the daemon to start automatically on boot, run the setup script from your normal user account (not as root):
 
 ```bash
 sudo ./setup/install-service.sh
+
+This script will also disable audio on the Raspberry Pi by disabling snd_bcm2835. This is a pre-requisite of the matrix library that the software uses.
 
 
 ## Enable /dev/serial0 on the PiZero
