@@ -2,7 +2,7 @@
 set -e
 
 # Ensure the script is run with sudo from a normal user account
-if [ "$EUID" -ne 0 ] \vert{}\vert{} [ -z "$SUDO_USER" ]; then
+if [ "$EUID" -ne 0 ] || [ -z "$SUDO_USER" ]; then
     echo "Please run this script using sudo from your normal user account:"
     echo "  sudo $0"
     exit 1
@@ -58,10 +58,10 @@ if [ -n "$USER_HOME" ] && [ -d "$USER_HOME" ]; then
     chmod o+x "$USER_HOME"
 fi
 
-for DIR in "$PROJECT_DIR/instance" "$PROJECT_DIR/data"; do
+for DIR in "$PROJECT_DIR/instance" "$PROJECT_DIR/data" "$PROJECT_DIR/uploads"; do
     mkdir -p "$DIR"
     chown -R "$SUDO_USER:daemon" "$DIR"
-    chmod -R 775 "$DIR"
+    chmod -R 2775 "$DIR"
 done
 
 # 3. Install and enable the systemd service
