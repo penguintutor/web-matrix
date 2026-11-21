@@ -58,7 +58,7 @@ if [ -n "$USER_HOME" ] && [ -d "$USER_HOME" ]; then
     chmod o+x "$USER_HOME"
 fi
 
-for DIR in "$PROJECT_DIR/instance" "$PROJECT_DIR/data" "$PROJECT_DIR/uploads"; do
+for DIR in "$PROJECT_DIR/instance" "$PROJECT_DIR/data" "$PROJECT_DIR/uploads" "$PROJECT_DIR/fonts"; do
     mkdir -p "$DIR"
     chown -R "$SUDO_USER:daemon" "$DIR"
     chmod -R 2775 "$DIR"
