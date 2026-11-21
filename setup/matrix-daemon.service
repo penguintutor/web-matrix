@@ -5,9 +5,9 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/home/<username>/web_matrix
+WorkingDirectory=/home/<username>/web-matrix
 Environment="SUDO_USER=daemon"
-ExecStart=/home/<username>/venv/pixels/bin/python /home/<username>/web_matrix/run_daemon.py
+ExecStart=/home/<username>/venv/pixels/bin/python /home/<username>/web-matrix/run_daemon.py
 Restart=on-failure
 RestartSec=5
 
