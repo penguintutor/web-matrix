@@ -2,13 +2,15 @@
 set -e
 
 # Ensure the script is run with sudo from a normal user account
-if [ "$EUID" -ne 0 ] || [ -z "$SUDO_USER" ]; then
+if [ "$EUID" -ne 0 ] \vert{}\vert{} [ -z "$SUDO_USER" ]; then
     echo "Please run this script using sudo from your normal user account:"
     echo "  sudo $0"
     exit 1
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+USER_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
 SERVICE_TEMPLATE="$SCRIPT_DIR/matrix-daemon.service"
 TARGET_SERVICE="/etc/systemd/system/matrix-daemon.service"
 BLACKLIST_FILE="/etc/modprobe.d/blacklist-rgb-matrix.conf"
@@ -46,12 +48,23 @@ if [ ! -f "$BLACKLIST_FILE" ] || ! grep -q "blacklist snd_bcm2835" "$BLACKLIST_F
     REBOOT_REQUIRED=1
 fi
 
-# Check if the module is still loaded right now
 if lsmod | grep -q "^snd_bcm2835"; then
     REBOOT_REQUIRED=1
 fi
 
-# 2. Install and enable the systemd service
+# 2. Configure directory permissions for the daemon user
+echo "Configuring permissions for daemon user..."
+if [ -n "$USER_HOME" ] && [ -d "$USER_HOME" ]; then
+    chmod o+x "$USER_HOME"
+fi
+
+for DIR in "$PROJECT_DIR/instance" "$PROJECT_DIR/data"; do
+    mkdir -p "$DIR"
+    chown -R "$SUDO_USER:daemon" "$DIR"
+    chmod -R 775 "$DIR"
+done
+
+# 3. Install and enable the systemd service
 echo "Installing matrix-daemon.service for user: $SUDO_USER..."
 sed "s/<username>/$SUDO_USER/g" "$SERVICE_TEMPLATE" > "$TARGET_SERVICE"
 chmod 644 "$TARGET_SERVICE"
@@ -59,7 +72,7 @@ chmod 644 "$TARGET_SERVICE"
 systemctl daemon-reload
 systemctl enable matrix-daemon.service
 
-# 3. Start immediately or prompt for reboot if audio module is still active
+# 4. Start immediately or prompt for reboot if audio module is still active
 if [ "$REBOOT_REQUIRED" -eq 1 ]; then
     echo ""
     echo "================================================================="

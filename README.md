@@ -1,6 +1,11 @@
 # web-matrix
 Web management for a Raspberry Pi RGB Matrix display
 
+## Web Interface
+
+The web interface is accessed through port 5000. 
+If connecting from the Raspberry Pi then use http://localhost:5000 . From another computer replace localhost with the IP address of the Raspberry Pi.
+
 ## Hardware
 
 This is designed to run on a Raspberry Pi and control a HUB75 Matrix LED display. It can be hardwired directly (although needs the Raspberry Pi to be located close to the matrix as the matrix is designed for 5V compared with 3.3V from the Raspberry Pi. Details of how to wire directly are at: [PenguinTutor RPi Matrix wiring page](https://www.penguintutor.com/projects/rpi-matrix-rgbled). 
@@ -25,10 +30,6 @@ This can run on a standard Rasbperry Pi 1, such as the Pi Zero W. However note t
 
 Note there will be some warnings during install of the pre-requisites. This is due to the use of system packages for some of the libraries to simplify install. 
 
-## Start the server automatically
-
-
-
 ### Automatic Startup (systemd)
 
 To configure the daemon to start automatically on boot, run the setup script from your normal user account (not as root):
@@ -36,7 +37,7 @@ To configure the daemon to start automatically on boot, run the setup script fro
 ```bash
 sudo ./setup/install-service.sh
 
-This script will also disable audio on the Raspberry Pi by disabling snd_bcm2835. This is a pre-requisite of the matrix library that the software uses.
+This script will also disable audio on the Raspberry Pi by disabling snd_bcm2835. This is a pre-requisite of the matrix library that the software uses. You will need to restart the Raspberry Pi for this to take effect.
 
 
 ## Enable /dev/serial0 on the PiZero
