@@ -6,6 +6,8 @@ Web management for a Raspberry Pi RGB Matrix display
 The web interface is accessed through port 5000. 
 If connecting from the Raspberry Pi then use http://localhost:5000 . From another computer replace localhost with the IP address of the Raspberry Pi.
 
+For more details about the project please see the [PenguinTutor RPi Matrix Christmas Advent Calendar](https://www.penguintutor.com/projects/pi-matrix-advent). 
+
 ## Hardware
 
 This is designed to run on a Raspberry Pi and control a HUB75 Matrix LED display. It can be hardwired directly (although needs the Raspberry Pi to be located close to the matrix as the matrix is designed for 5V compared with 3.3V from the Raspberry Pi. Details of how to wire directly are at: [PenguinTutor RPi Matrix wiring page](https://www.penguintutor.com/projects/rpi-matrix-rgbled). 
@@ -17,16 +19,17 @@ This can run on a standard Rasbperry Pi 1, such as the Pi Zero W. However note t
 
 ## Install
 
-    mkdir ~/venv
-    python -m venv ~/venv/pixels --system-site-packages
-    sudo apt-get install python-dev-is-python3 python3-pil cython3
-    source ~/venv/pixels/bin/activate
-    pip install --upgrade Cython
-    pip install git+https://github.com/hzeller/rpi-rgb-led-matrix
-    pip install Flask Pillow APScheduler SQLAlchemy waitress
+```bash
+mkdir ~/venv
+python -m venv ~/venv/pixels --system-site-packages
+sudo apt-get install python-dev-is-python3 python3-pil cython3
+source ~/venv/pixels/bin/activate
+pip install --upgrade Cython
+pip install git+https://github.com/hzeller/rpi-rgb-led-matrix
+pip install Flask Pillow APScheduler SQLAlchemy waitress
 
-    git clone https://github.com/penguintutor/web-matrix.git
-
+git clone https://github.com/penguintutor/web-matrix.git
+```
 
 Note there will be some warnings during install of the pre-requisites. This is due to the use of system packages for some of the libraries to simplify install. 
 
@@ -38,7 +41,7 @@ To configure the daemon to start automatically on boot, run the setup script fro
 sudo ./setup/install-service.sh
 
 This script will also disable audio on the Raspberry Pi by disabling snd_bcm2835. This is a pre-requisite of the matrix library that the software uses. You will need to restart the Raspberry Pi for this to take effect.
-
+```
 
 ## Enable /dev/serial0 on the PiZero
 
